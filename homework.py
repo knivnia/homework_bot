@@ -1,13 +1,15 @@
 import logging
 import os
-import time
 import sys
+import time
+from http import HTTPStatus
 
 import requests
-
-from telegram import Bot
-
 from dotenv import load_dotenv
+from telegram import Bot, TelegramError
+
+from exceptions import ConnectionError, EndpointError
+
 
 load_dotenv()
 
@@ -20,7 +22,7 @@ ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
 HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
-HOMEWORK_STATUSES = {
+HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
@@ -35,105 +37,117 @@ HOMEWORK_KEYS = (
     'lesson_name'
 )
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='homework.log',
-    filemode='w'
-)
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-handler = logging.StreamHandler(sys.stdout)
-logger.addHandler(handler)
-formatter = logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-handler.setFormatter(formatter)
+REQUEST = {
+    'url': ENDPOINT,
+    'headers': HEADERS,
+    'params': {'from_date': int(time.time())}
+}
 
 
 def send_message(bot, message):
     """Send message in Telegram chat."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
+    except TelegramError:
+        raise TelegramError(f'Message has not been sent. {sys.exc_info}.')
+    else:
         logging.info('Message has been sent.')
-    except Exception as error:
-        logging.error(
-            f'Something went wrong. Message has not been sent. {error}.'
-        )
 
 
 def get_api_answer(current_timestamp):
     """Get response from API."""
+    REQUEST['params'] = {'from_date': current_timestamp}
     try:
-        timestamp = current_timestamp or int(time.time())
-        params = {'from_date': timestamp}
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-        if response.status_code != 200:
-            logger.error(f'Wrong page status - {response.status_code}')
-            raise ConnectionError(f'Wrong page status: {response.status_code}')
+        response = requests.get(
+            REQUEST['url'],
+            headers=REQUEST['headers'],
+            params=REQUEST['params']
+        )
+        if response.status_code != HTTPStatus.OK:
+            raise ConnectionError(
+                f'Wrong page status: {response.status_code}'
+            )
         response = response.json()
         return response
-    except Exception as error:
-        logging.error(f'API is not available, {error}.')
-        raise Exception(f'API is not available, {error}.')
+    except EndpointError as error:
+        raise EndpointError(f'API is not available, {error}.')
 
 
 def check_response(response):
     """Check API response."""
-    if type(response) is not dict:
-        logger.error('Wrong data type!')
-        raise TypeError('Wrong data type(dict)!')
-    try:
-        homework = response.get('homeworks')
-    except IndexError:
-        logger.error('Response is empty.')
-    if type(homework) is not list:
-        raise TypeError('Wrong data type(list)!')
+    logger.info('Beginning to check API response.')
+    if not isinstance(response, dict):
+        raise TypeError('Wrong data type (dict)!')
+    if response.get('homeworks') is None:
+        raise IndexError('Homeworks not in response.')
+    if response.get('current_date') is None:
+        raise IndexError('Current date not in response.')
+    homework = response.get('homeworks')
+    if not isinstance(homework, list):
+        raise TypeError('Wrong data type (list)!')
     return homework
 
 
 def parse_status(homework):
     """Get homework status from API response."""
     homework_name = homework['homework_name']
+    if homework_name is None:
+        raise IndexError('No homework name in response.')
     homework_status = homework['status']
-    if 'homework_name' not in homework:
-        logger.error('No homework_name in response.')
-        raise Exception('No homework name in response.')
-    if homework_status not in HOMEWORK_STATUSES:
-        logger.error('Unexpected homework status.')
-        raise Exception('Unexpected homework status.')
-    verdict = HOMEWORK_STATUSES[homework_status]
+    if homework_status not in HOMEWORK_VERDICTS:
+        raise IndexError('Unexpected homework status.')
+    verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def check_tokens():
     """Check tokens in .env."""
-    try:
-        if all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID]):
-            return True
-    except KeyError:
-        logger.critical('Tokens are missing!')
-        raise KeyError('Tokens are missing!')
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def main():
     """Bot logic."""
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    check_tokens()
+    if check_tokens() is False:
+        logger.critical('Tokens are missing!')
+        sys.exit('Tokens are missing!')
     while True:
         try:
             response = get_api_answer(current_timestamp)
             homework = check_response(response)
-            message = parse_status(homework[0])
-            send_message(bot, message)
+            if len(homework) > 0:
+                message = parse_status(homework[0])
+                send_message(bot, message)
+            else:
+                logger.debug('No updates.')
             current_timestamp = response.get('current_date')
             time.sleep(RETRY_TIME)
         except Exception as error:
+            logger.error(f'Error: {error}')
             message = f'Error: {error}'
             bot.send_message(TELEGRAM_CHAT_ID, message)
             time.sleep(RETRY_TIME)
 
+
+if not logging.getLogger().hasHandlers():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        handlers=[
+            logging.FileHandler(os.path.basename('/root/homework.log'), 'w'),
+            logging.StreamHandler(sys.stdout)],
+        format=(
+            '%(asctime)s -'
+            ' %(name)s -'
+            ' %(levelname)s -'
+            ' %(funcName)s -'
+            ' %(levelno)s -'
+            ' %(message)s'
+        )
+    )
+    logger = logging.getLogger(__name__)
+else:
+    logger = logging.getLogger()
 
 if __name__ == '__main__':
     main()
