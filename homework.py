@@ -121,7 +121,7 @@ def main():
                 send_message(bot, message)
             else:
                 logger.debug('No updates.')
-            current_timestamp = response.get('current_date')
+            current_timestamp = response.get('current_date', current_timestamp)
             time.sleep(RETRY_TIME)
         except Exception as error:
             logger.error(f'Error: {error}')
