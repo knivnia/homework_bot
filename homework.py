@@ -6,10 +6,11 @@ from http import HTTPStatus
 
 import requests
 from dotenv import load_dotenv
-from telegram import Bot, TelegramError
+from telegram import Bot
 
-from exceptions import ConnectionError, EndpointError
+from exceptions import EndpointError, MessageError, DateError
 
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 
@@ -28,61 +29,49 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-HOMEWORK_KEYS = (
-    'id',
-    'status',
-    'homework_name',
-    'reviewer_comment',
-    'date_updated',
-    'lesson_name'
-)
-
-REQUEST = {
-    'url': ENDPOINT,
-    'headers': HEADERS,
-    'params': {'from_date': int(time.time())}
-}
-
 
 def send_message(bot, message):
     """Send message in Telegram chat."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except TelegramError:
-        raise TelegramError(f'Message has not been sent. {sys.exc_info}.')
+    except MessageError:
+        raise MessageError(
+            f'Message "{message}" has not been sent. {sys.exc_info}.'
+        )
     else:
         logging.info('Message has been sent.')
 
 
 def get_api_answer(current_timestamp):
     """Get response from API."""
-    REQUEST['params'] = {'from_date': current_timestamp}
+    request = {
+        'url': ENDPOINT,
+        'headers': HEADERS,
+        'params': {'from_date': int(time.time())}
+    }
+    request['params'] = {'from_date': current_timestamp}
+    url, headers, params = request.values()
+    error_message = f'API {url} is not available.'
     try:
-        response = requests.get(
-            REQUEST['url'],
-            headers=REQUEST['headers'],
-            params=REQUEST['params']
-        )
+        response = requests.get(url, headers=headers, params=params)
         if response.status_code != HTTPStatus.OK:
-            raise ConnectionError(
-                f'Wrong page status: {response.status_code}'
-            )
-        response = response.json()
-        return response
-    except EndpointError as error:
-        raise EndpointError(f'API is not available, {error}.')
+            error_message = f'Wrong page status: {response.status_code}'
+            raise Exception
+        return response.json()
+    except Exception:
+        raise EndpointError(error_message)
 
 
 def check_response(response):
     """Check API response."""
     logger.info('Beginning to check API response.')
+    homework = response['homeworks']
     if not isinstance(response, dict):
         raise TypeError('Wrong data type (dict)!')
-    if response.get('homeworks') is None:
-        raise IndexError('Homeworks not in response.')
-    if response.get('current_date') is None:
-        raise IndexError('Current date not in response.')
-    homework = response.get('homeworks')
+    if homework is None:
+        raise KeyError('Homeworks not in response.')
+    if response['current_date'] is None:
+        raise DateError('Current date not in response.')
     if not isinstance(homework, list):
         raise TypeError('Wrong data type (list)!')
     return homework
@@ -90,10 +79,14 @@ def check_response(response):
 
 def parse_status(homework):
     """Get homework status from API response."""
-    homework_name = homework['homework_name']
-    if homework_name is None:
-        raise IndexError('No homework name in response.')
-    homework_status = homework['status']
+    try:
+        homework_name = homework['homework_name']
+    except KeyError:
+        raise KeyError('No homework name in response.')
+    try:
+        homework_status = homework['status']
+    except KeyError:
+        raise KeyError('No homework status in response.')
     if homework_status not in HOMEWORK_VERDICTS:
         raise IndexError('Unexpected homework status.')
     verdict = HOMEWORK_VERDICTS[homework_status]
@@ -109,7 +102,7 @@ def main():
     """Bot logic."""
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    if check_tokens() is False:
+    if not check_tokens():
         logger.critical('Tokens are missing!')
         sys.exit('Tokens are missing!')
     while True:
@@ -117,20 +110,23 @@ def main():
             response = get_api_answer(current_timestamp)
             homework = check_response(response)
             if len(homework) > 0:
-                message = parse_status(homework[0])
+                message = parse_status(homework.pop())
                 send_message(bot, message)
             else:
-                logger.debug('No updates.')
+                logger.info('No updates.')
             current_timestamp = response.get('current_date', current_timestamp)
-            time.sleep(RETRY_TIME)
         except Exception as error:
-            logger.error(f'Error: {error}')
-            message = f'Error: {error}'
-            bot.send_message(TELEGRAM_CHAT_ID, message)
+            if isinstance(error, [MessageError, DateError]):
+                logger.error(message, exc_info=True)
+            else:
+                message = f'Error: {error}'
+                logger.error(message)
+                bot.send_message(TELEGRAM_CHAT_ID, message)
+        finally:
             time.sleep(RETRY_TIME)
 
 
-if not logging.getLogger().hasHandlers():
+if __name__ == '__main__':
     logging.basicConfig(
         level=logging.DEBUG,
         handlers=[
@@ -145,9 +141,4 @@ if not logging.getLogger().hasHandlers():
             ' %(message)s'
         )
     )
-    logger = logging.getLogger(__name__)
-else:
-    logger = logging.getLogger()
-
-if __name__ == '__main__':
     main()
