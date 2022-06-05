@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from telegram import Bot
 
-from exceptions import EndpointError, MessageError, DateError
+from exceptions import ErrorEventNotForSending
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +34,8 @@ def send_message(bot, message):
     """Send message in Telegram chat."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except MessageError:
-        raise MessageError(
+    except Exception:
+        raise ErrorEventNotForSending(
             f'Message "{message}" has not been sent. {sys.exc_info}.'
         )
     else:
@@ -47,48 +47,53 @@ def get_api_answer(current_timestamp):
     request = {
         'url': ENDPOINT,
         'headers': HEADERS,
-        'params': {'from_date': int(time.time())}
+        'params': {'from_date': current_timestamp}
     }
-    request['params'] = {'from_date': current_timestamp}
-    url, headers, params = request.values()
-    error_message = f'API {url} is not available.'
+    error_message = (
+        f'API "{request["url"]}" with headers: '
+        f'"{request["headers"]}" and params:'
+        f'"{request["params"]}" is not available.'
+    )
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.get(**request)
         if response.status_code != HTTPStatus.OK:
-            error_message = f'Wrong page status: {response.status_code}'
+            error_message = (
+                f'API "{request["url"]}" with headers: '
+                f'"{request["headers"]}" and params:'
+                f'"{request["[params]"]}" returned wrong '
+                f'page status: {response.status_code}.'
+            )
             raise Exception
         return response.json()
     except Exception:
-        raise EndpointError(error_message)
+        raise Exception(error_message)
 
 
 def check_response(response):
     """Check API response."""
     logger.info('Beginning to check API response.')
-    homework = response['homeworks']
     if not isinstance(response, dict):
         raise TypeError('Wrong data type (dict)!')
-    if homework is None:
+    homeworks = response.get('homeworks')
+    if homeworks is None:
         raise KeyError('Homeworks not in response.')
     if response['current_date'] is None:
-        raise DateError('Current date not in response.')
-    if not isinstance(homework, list):
+        raise ErrorEventNotForSending('Current date not in response.')
+    if not isinstance(homeworks, list):
         raise TypeError('Wrong data type (list)!')
-    return homework
+    return homeworks
 
 
-def parse_status(homework):
+def parse_status(homeworks):
     """Get homework status from API response."""
-    try:
-        homework_name = homework['homework_name']
-    except KeyError:
+    homework_name = homeworks.get('homework_name')
+    if homework_name is None:
         raise KeyError('No homework name in response.')
-    try:
-        homework_status = homework['status']
-    except KeyError:
+    homework_status = homeworks.get('status')
+    if homework_status is None:
         raise KeyError('No homework status in response.')
     if homework_status not in HOMEWORK_VERDICTS:
-        raise IndexError('Unexpected homework status.')
+        raise ValueError('Unexpected homework status.')
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -108,20 +113,19 @@ def main():
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-            if len(homework) > 0:
-                message = parse_status(homework.pop())
+            homeworks = check_response(response)
+            if len(homeworks) > 0:
+                message = parse_status(homeworks.pop())
                 send_message(bot, message)
             else:
                 logger.info('No updates.')
             current_timestamp = response.get('current_date', current_timestamp)
+        except ErrorEventNotForSending:
+            logger.error(message, exc_info=True)
         except Exception as error:
-            if isinstance(error, [MessageError, DateError]):
-                logger.error(message, exc_info=True)
-            else:
-                message = f'Error: {error}'
-                logger.error(message)
-                bot.send_message(TELEGRAM_CHAT_ID, message)
+            message = f'Error: {error}'
+            logger.error(message)
+            bot.send_message(TELEGRAM_CHAT_ID, message)
         finally:
             time.sleep(RETRY_TIME)
 
