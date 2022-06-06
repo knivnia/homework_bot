@@ -6,7 +6,7 @@ from http import HTTPStatus
 
 import requests
 from dotenv import load_dotenv
-from telegram import Bot
+from telegram import Bot, TelegramError
 
 from exceptions import ErrorEventNotForSending
 
@@ -34,9 +34,9 @@ def send_message(bot, message):
     """Send message in Telegram chat."""
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-    except Exception:
+    except TelegramError:
         raise ErrorEventNotForSending(
-            f'Message "{message}" has not been sent. {sys.exc_info}.'
+            f'Message "{message}" has not been sent.'
         )
     else:
         logging.info('Message has been sent.')
@@ -49,24 +49,22 @@ def get_api_answer(current_timestamp):
         'headers': HEADERS,
         'params': {'from_date': current_timestamp}
     }
-    error_message = (
+    base_error_message = (
         f'API "{request["url"]}" with headers: '
         f'"{request["headers"]}" and params:'
-        f'"{request["params"]}" is not available.'
+        f'"{request["params"]}"'
     )
     try:
         response = requests.get(**request)
         if response.status_code != HTTPStatus.OK:
             error_message = (
-                f'API "{request["url"]}" with headers: '
-                f'"{request["headers"]}" and params:'
-                f'"{request["[params]"]}" returned wrong '
+                f'{base_error_message} returned wrong '
                 f'page status: {response.status_code}.'
             )
-            raise Exception
+            raise ConnectionError(error_message)
         return response.json()
     except Exception:
-        raise Exception(error_message)
+        raise ConnectionError(f'{base_error_message} is not available.')
 
 
 def check_response(response):
@@ -77,10 +75,12 @@ def check_response(response):
     homeworks = response.get('homeworks')
     if homeworks is None:
         raise KeyError('Homeworks not in response.')
-    if response['current_date'] is None:
-        raise ErrorEventNotForSending('Current date not in response.')
     if not isinstance(homeworks, list):
         raise TypeError('Wrong data type (list)!')
+    try:
+        response['current_date']
+    except KeyError:
+        raise ErrorEventNotForSending('Current date not in response.')
     return homeworks
 
 
@@ -90,10 +90,8 @@ def parse_status(homeworks):
     if homework_name is None:
         raise KeyError('No homework name in response.')
     homework_status = homeworks.get('status')
-    if homework_status is None:
-        raise KeyError('No homework status in response.')
     if homework_status not in HOMEWORK_VERDICTS:
-        raise ValueError('Unexpected homework status.')
+        raise ValueError(f'Unexpected homework status: "{homework_status}".')
     verdict = HOMEWORK_VERDICTS[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -120,8 +118,13 @@ def main():
             else:
                 logger.info('No updates.')
             current_timestamp = response.get('current_date', current_timestamp)
-        except ErrorEventNotForSending:
+        except ErrorEventNotForSending as error:
+            message = f'Error: {error}'
             logger.error(message, exc_info=True)
+        except ConnectionError as error:
+            message = f'Error: {error}'
+            logger.error(message)
+            bot.send_message(TELEGRAM_CHAT_ID, message)
         except Exception as error:
             message = f'Error: {error}'
             logger.error(message)
