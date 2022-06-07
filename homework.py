@@ -77,9 +77,7 @@ def check_response(response):
         raise KeyError('Homeworks not in response.')
     if not isinstance(homeworks, list):
         raise TypeError('Wrong data type (list)!')
-    try:
-        response['current_date']
-    except KeyError:
+    if response.get('current_date') is None:
         raise ErrorEventNotForSending('Current date not in response.')
     return homeworks
 
@@ -119,12 +117,7 @@ def main():
                 logger.info('No updates.')
             current_timestamp = response.get('current_date', current_timestamp)
         except ErrorEventNotForSending as error:
-            message = f'Error: {error}'
-            logger.error(message, exc_info=True)
-        except ConnectionError as error:
-            message = f'Error: {error}'
-            logger.error(message)
-            bot.send_message(TELEGRAM_CHAT_ID, message)
+            logger.error(f'Error: {error}', exc_info=True)
         except Exception as error:
             message = f'Error: {error}'
             logger.error(message)
