@@ -24,9 +24,9 @@ HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
 HOMEWORK_VERDICTS = {
-    'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
-    'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена: у ревьюера есть замечания.'
+    'approved': 'Homework is approved by reviewer. Congratulations!',
+    'reviewing': 'Reviewer is checking your homework.',
+    'rejected': 'Homework is checked: need to fix something.'
 }
 
 
@@ -91,7 +91,7 @@ def parse_status(homeworks):
     if homework_status not in HOMEWORK_VERDICTS:
         raise ValueError(f'Unexpected homework status: "{homework_status}".')
     verdict = HOMEWORK_VERDICTS[homework_status]
-    return f'Изменился статус проверки работы "{homework_name}". {verdict}'
+    return f'Homework "{homework_name}" status is changed. {verdict}'
 
 
 def check_tokens():
