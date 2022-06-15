@@ -91,7 +91,11 @@ def parse_status(homeworks):
     if homework_status not in HOMEWORK_VERDICTS:
         raise ValueError(f'Unexpected homework status: "{homework_status}".')
     verdict = HOMEWORK_VERDICTS[homework_status]
-    return f'Homework "{homework_name}" status is changed. {verdict}'
+    comment = homeworks.get('reviewer_comment')
+    return (
+        f'Homework "{homework_name}" status is changed. {verdict} '
+        f'Comment by reviewer: {comment}'
+    )
 
 
 def check_tokens():
