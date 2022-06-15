@@ -94,7 +94,7 @@ def parse_status(homeworks):
     comment = homeworks.get('reviewer_comment')
     return (
         f'Homework "{homework_name}" status is changed. {verdict} '
-        f'Comment by reviewer: {comment}'
+        f'Comment by reviewer: "{comment}"'
     )
 
 
