@@ -92,10 +92,15 @@ def parse_status(homeworks):
         raise ValueError(f'Unexpected homework status: "{homework_status}".')
     verdict = HOMEWORK_VERDICTS[homework_status]
     comment = homeworks.get('reviewer_comment')
-    return (
-        f'Homework "{homework_name}" status is changed. {verdict} '
-        f'Comment by reviewer: "{comment}"'
-    )
+    if homework_status == 'reviewing':
+        return (
+            f'Homework "{homework_name}" status is changed. {verdict}'
+        )
+    else:
+        return (
+            f'Homework "{homework_name}" status is changed. {verdict} '
+            f'Comment by reviewer: "{comment}"'
+        )
 
 
 def check_tokens():
