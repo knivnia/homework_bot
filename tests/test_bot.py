@@ -86,7 +86,7 @@ class TestHomework:
         except KeyError:
             pass
     try:
-        import homework
+        import homework_bot
     except KeyError as e:
         for arg in e.args:
             if arg in ENV_VARS:
@@ -109,18 +109,18 @@ class TestHomework:
             except KeyError:
                 pass
 
-        import homework
+        import homework_bot
 
         for v in self.ENV_VARS:
-            utils.check_default_var_exists(homework, v)
+            utils.check_default_var_exists(homework_bot, v)
 
-        homework.PRACTICUM_TOKEN = None
-        homework.TELEGRAM_TOKEN = None
-        homework.TELEGRAM_CHAT_ID = None
+        homework_bot.PRACTICUM_TOKEN = None
+        homework_bot.TELEGRAM_TOKEN = None
+        homework_bot.TELEGRAM_CHAT_ID = None
 
         func_name = 'check_tokens'
-        utils.check_function(homework, func_name, 0)
-        tokens = homework.check_tokens()
+        utils.check_function(homework_bot, func_name, 0)
+        tokens = homework_bot.check_tokens()
         assert not tokens, (
             'Проверьте, что при отсутствии необходимых переменных окружения, '
             f'функция {func_name} возвращает False'
@@ -133,27 +133,27 @@ class TestHomework:
             except KeyError:
                 pass
 
-        import homework
+        import homework_bot
 
         for v in self.ENV_VARS:
-            utils.check_default_var_exists(homework, v)
+            utils.check_default_var_exists(homework_bot, v)
 
-        homework.PRACTICUM_TOKEN = 'sometoken'
-        homework.TELEGRAM_TOKEN = '1234:abcdefg'
-        homework.TELEGRAM_CHAT_ID = 12345
+        homework_bot.PRACTICUM_TOKEN = 'sometoken'
+        homework_bot.TELEGRAM_TOKEN = '1234:abcdefg'
+        homework_bot.TELEGRAM_CHAT_ID = 12345
 
         func_name = 'check_tokens'
-        utils.check_function(homework, func_name, 0)
-        tokens = homework.check_tokens()
+        utils.check_function(homework_bot, func_name, 0)
+        tokens = homework_bot.check_tokens()
         assert tokens, (
             'Проверьте, что при наличии необходимых переменных окружения, '
             f'функция {func_name} возвращает True'
         )
 
     def test_bot_init_not_global(self):
-        import homework
+        import homework_bot
 
-        assert not (hasattr(homework, 'bot') and isinstance(getattr(homework, 'bot'), telegram.Bot)), (
+        assert not (hasattr(homework_bot, 'bot') and isinstance(getattr(homework_bot, 'bot'), telegram.Bot)), (
             'Убедитесь, что бот инициализирован только в main()'
         )
 
@@ -163,9 +163,9 @@ class TestHomework:
 
         monkeypatch.setattr(telegram, "Bot", mock_telegram_bot)
 
-        import homework
+        import homework_bot
 
-        assert hasattr(homework, 'logging'), (
+        assert hasattr(homework_bot, 'logging'), (
             'Убедитесь, что настроили логирование для вашего бота'
         )
 
@@ -175,8 +175,8 @@ class TestHomework:
 
         monkeypatch.setattr(telegram, "Bot", mock_telegram_bot)
 
-        import homework
-        utils.check_function(homework, 'send_message', 2)
+        import homework_bot
+        utils.check_function(homework_bot, 'send_message', 2)
 
     def test_get_api_answers(self, monkeypatch, random_timestamp,
                              current_timestamp, api_url):
@@ -188,12 +188,12 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'get_api_answer'
-        utils.check_function(homework, func_name, 1)
+        utils.check_function(homework_bot, func_name, 1)
 
-        result = homework.get_api_answer(current_timestamp)
+        result = homework_bot.get_api_answer(current_timestamp)
         assert type(result) == dict, (
             f'Проверьте, что из функции `{func_name}` '
             'возвращается словарь'
@@ -234,11 +234,11 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_500_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'get_api_answer'
         try:
-            homework.get_api_answer(current_timestamp)
+            homework_bot.get_api_answer(current_timestamp)
         except:
             pass
         else:
@@ -257,13 +257,13 @@ class TestHomework:
             "lesson_name": "Итоговый проект"
         }
 
-        import homework
+        import homework_bot
 
         func_name = 'parse_status'
 
-        utils.check_function(homework, func_name, 1)
+        utils.check_function(homework_bot, func_name, 1)
 
-        result = homework.parse_status(test_data)
+        result = homework_bot.parse_status(test_data)
         assert result.startswith(
             f'Изменился статус проверки работы "{random_timestamp}"'
         ), (
@@ -277,7 +277,7 @@ class TestHomework:
         )
 
         test_data['status'] = status = 'rejected'
-        result = homework.parse_status(test_data)
+        result = homework_bot.parse_status(test_data)
         assert result.startswith(
             f'Изменился статус проверки работы "{random_timestamp}"'
         ), (
@@ -317,11 +317,11 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
-        response = homework.get_api_answer(current_timestamp)
-        status = homework.check_response(response)
+        response = homework_bot.get_api_answer(current_timestamp)
+        status = homework_bot.check_response(response)
         assert status, (
             f'Убедитесь, что функция `{func_name} '
             'правильно работает '
@@ -354,15 +354,15 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'parse_status'
-        response = homework.get_api_answer(current_timestamp)
-        homeworks = homework.check_response(response)
+        response = homework_bot.get_api_answer(current_timestamp)
+        homeworks = homework_bot.check_response(response)
         for hw in homeworks:
             status_message = None
             try:
-                status_message = homework.parse_status(hw)
+                status_message = homework_bot.parse_status(hw)
             except:
                 pass
             else:
@@ -402,15 +402,15 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'parse_status'
-        response = homework.get_api_answer(current_timestamp)
-        homeworks = homework.check_response(response)
+        response = homework_bot.get_api_answer(current_timestamp)
+        homeworks = homework_bot.check_response(response)
         for hw in homeworks:
             status_message = None
             try:
-                status_message = homework.parse_status(hw)
+                status_message = homework_bot.parse_status(hw)
             except:
                 pass
             else:
@@ -450,14 +450,14 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'parse_status'
-        response = homework.get_api_answer(current_timestamp)
-        homeworks = homework.check_response(response)
+        response = homework_bot.get_api_answer(current_timestamp)
+        homeworks = homework_bot.check_response(response)
         try:
             for hw in homeworks:
-                homework.parse_status(hw)
+                homework_bot.parse_status(hw)
         except KeyError:
             pass
         else:
@@ -486,12 +486,12 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_no_homeworks_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
-        result = homework.get_api_answer(current_timestamp)
+        result = homework_bot.get_api_answer(current_timestamp)
         try:
-            homework.check_response(result)
+            homework_bot.check_response(result)
         except:
             pass
         else:
@@ -527,12 +527,12 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
-        response = homework.get_api_answer(current_timestamp)
+        response = homework_bot.get_api_answer(current_timestamp)
         try:
-            status = homework.check_response(response)
+            status = homework_bot.check_response(response)
         except TypeError:
             pass
         else:
@@ -567,12 +567,12 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
-        response = homework.get_api_answer(current_timestamp)
+        response = homework_bot.get_api_answer(current_timestamp)
         try:
-            homeworks = homework.check_response(response)
+            homeworks = homework_bot.check_response(response)
         except:
             pass
         else:
@@ -601,12 +601,12 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_empty_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
-        result = homework.get_api_answer(current_timestamp)
+        result = homework_bot.get_api_answer(current_timestamp)
         try:
-            homework.check_response(result)
+            homework_bot.check_response(result)
         except:
             pass
         else:
@@ -628,11 +628,11 @@ class TestHomework:
 
         monkeypatch.setattr(requests, 'get', mock_response_get)
 
-        import homework
+        import homework_bot
 
         func_name = 'check_response'
         try:
-            homework.get_api_answer(current_timestamp)
+            homework_bot.get_api_answer(current_timestamp)
         except:
             pass
         else:
